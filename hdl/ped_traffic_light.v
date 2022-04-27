@@ -13,6 +13,7 @@
 
 `timescale 1ps/1ps
 
+
 module ped_traffic_light #(
 // Parameters IF
   parameter TP = 1 // Time Propagation
@@ -35,7 +36,11 @@ module ped_traffic_light #(
 //                                            LOCAL PARAMETERS
 //--------------------------------------------------------------------------------------------------
 
-
+localparam UNPRESSED_GREEN = 4'b000;
+localparam PRESSED_GREEN   = 4'b001;
+localparam CROSSED_GREEN   = 4'b010;
+localparam YELLOW          = 4'b011;
+localparam RED             = 4'b100;
 
 
 
@@ -43,13 +48,18 @@ module ped_traffic_light #(
 //                                            INTERNAL SIGNALS
 //-------------------------------------------------------------------------------------------------
 
-wire       ug              ; // unpressed green
-wire       pg              ; // pressed green
-wire       cg              ; // crossed green
-wire       fin_cnt         ; // active when counter finish current state timer
-reg  [5:0] counter         ; // Counter for state selection
-wire [1:0] state_selection ; // 00 - red , 01 - yellow , 10 - ug , 11 - pg
-wire       state_to_compare; // state to compare with counter
+wire          ug              ; // unpressed green
+wire          pg              ; // pressed green
+wire          cg              ; // crossed green
+wire          fin_cnt         ; // active when counter finish current state timer
+reg [6 - 1:0] counter         ; // Counter for state selection
+reg [2 - 1:0] current_state   ;
+reg [6 - 1:0] state_to_compare; // state to compare with counter
+
+//FSM Logic
+
+reg [2:0] state     ; // 000 - UG , 001 - PG , 010 - CG , 011 - YELLOW , 100 - RED
+reg [2:0] next_state;
 
 //--------------------------------------------------------------------------------------------------
 //                                                  CODE
@@ -59,33 +69,67 @@ assign traff_green = ug | pg | cg;
 assign ped_green = traff_red;
 assign ped_red = traff_green | traff_yellow;
 
-
-
 //COUNTER DESIGN 
+//--------------------------------------------------------------------------------------------------
 always @(posedge clk or negedge rst_n)
 if(rst_n  ) counter <= 6'd0          ;else
-if(~cg    ) counter <= counter + 6'd1;else 
+if(~cg    ) counter <= counter + 6'd1;else // enabled if not crossed green(noone pushed the button after 60s)
 if(fin_cnt) counter <= 6'd0          ;
 
 // ENCODER 2^2 : 2 
 always @(*)
-if(traff_red)    state_selection <= 2'b00;else 
-if(traff_yellow) state_selection <= 2'b01;else
-if(ug)           state_selection <= 2'b10;else
-if(pg)           state_selection <= 2'b11;else
-                 state_selection <= 2'b10;
-
+if(traff_red)    current_state <= 2'b00;else 
+if(traff_yellow) current_state <= 2'b01;else
+if(ug)           current_state <= 2'b10;else
+if(pg)           current_state <= 2'b11;else
+                 current_state <= 2'b10;
 // MUX 4:1 
 always @(*)
-case(state_selection) 
-  2'b00: state_to_compare = 6'b01_1101; // 29s                                      RED
-  2'b01: state_to_compare = 6'b00_0100; // 4s                                       YELLOW 
-  2'b10: state_to_compare = 6'b11_1011; // 59s                                      UG
-default: state_to_compare = 6'b11_1011; // 59s, default (case 2'b11, 'dx or others) PG
-
+case(current_state) 
+  2'b00:    state_to_compare = 6'b01_1101; // 29s                                      RED
+  2'b01:    state_to_compare = 6'b00_0100; // 4s                                       YELLOW 
+  2'b10:    state_to_compare = 6'b11_1011; // 59s                                      UG
+  default:  state_to_compare = 6'b11_1011; // 59s, default (case 2'b11, 'dx or others) PG
 
 assign fin_cnt = (counter == state_to_compare);
+//--------------------------------------------------------------------------------------------------
 
 
 
-endmodule    
+//FSM Code
+
+//STATE REGISTER
+always @(posedge clk or negedge rst_n)
+begin
+  if(~rst_n) state <= 'b000     ;else       
+             state <= next_state;
+end
+//STATE SWITCH LOGIC
+always @(*) 
+case (state)
+  UNPRESSED_GREEN: if(btn)     next_state <= PRESSED_GREEN  ;else
+                   if(fin_cnt) next_state <= CROSSED_GREEN  ;else
+                               next_state <= UNPRESSED_GREEN; 
+  PRESSED_GREEN  : if(fin_cnt) next_state <= YELLOW       ;else
+                               next_state <= PRESSED_GREEN;
+  CROSSED_GREEN  : if(btn) next_state <= YELLOW       ;else
+                           next_state <= CROSSED_GREEN;
+  YELLOW         : if(fin_cnt) next_state <= RED   ;else
+                               next_state <= YELLOW;
+  RED            : if(fin_cnt) next_state <= UNPRESSED_GREEN;else
+                               next_state <= RED            ;                                                                                              
+  default        : next_state <= UNPRESSED_GREEN;
+endcase  
+ 
+// DECODER 3 : 8
+
+assign ug = ({~next_state[2],~next_state[1],~next_state[0]}); // 000
+assign pg = ({~next_state[2],~next_state[1],next_state[0]});  // 001 
+assign cg = ({~next_state[2],next_state[1],~next_state[0]});  // 010
+assign traff_yellow = ({~next_state[2],next_state[1],next_state[0]}); // 011
+assign traff_red = ({next_state[2],~next_state[1],~next_state[0]}); // 100
+ 
+
+
+
+endmodule        
