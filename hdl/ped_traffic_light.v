@@ -1,4 +1,5 @@
 //--------------------------------------------------------------------------------------------------
+// University Transilvania of Brasov
 // Project     : Button Actioned Pedestrian Traffic Light
 // Module Name : ped_traffic_light.v
 // Author      : Raul Milchis(RM)
@@ -123,13 +124,6 @@ endcase
  
 // DECODER 3 : 8
 
-assign ug = ({~next_state[2],~next_state[1],~next_state[0]}); // 000
-assign pg = ({~next_state[2],~next_state[1],next_state[0]});  // 001 
-assign cg = ({~next_state[2],next_state[1],~next_state[0]});  // 010
-assign traff_yellow = ({~next_state[2],next_state[1],next_state[0]}); // 011
-assign traff_red = ({next_state[2],~next_state[1],~next_state[0]}); // 100
- 
-
-
+ assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state; 
 
 endmodule        
