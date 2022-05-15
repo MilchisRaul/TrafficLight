@@ -31,7 +31,6 @@ module ped_traffic_light #(
   output traff_yellow, // Traffic light's Yellow LED
   output traff_green   // Traffic light's Green LED
 // output timer         // optional timer output
-
 );
 //--------------------------------------------------------------------------------------------------
 //                                            LOCAL PARAMETERS
@@ -54,9 +53,9 @@ wire          pg              ; // pressed green
 wire          cg              ; // crossed green
 wire          fin_cnt         ; // active when counter finish current state timer
 reg [6 - 1:0] counter         ; // Counter for state selection
-reg [2 - 1:0] current_state   ;
+// reg [2 - 1:0] current_state   ;
 reg [6 - 1:0] state_to_compare; // state to compare with counter
-
+reg [6 - 1:0] state_to_compare_d; // state to compare with counter delayed 1 TCK
 //FSM Logic
 
 reg [2:0] state     ; // 000 - UG , 001 - PG , 010 - CG , 011 - YELLOW , 100 - RED
@@ -73,28 +72,26 @@ assign ped_red = traff_green | traff_yellow;
 //COUNTER DESIGN 
 //--------------------------------------------------------------------------------------------------
 always @(posedge clk or negedge rst_n)
-if(rst_n  ) counter <= 6'd0          ;else
-if(~cg    ) counter <= counter + 6'd1;else // enabled if not crossed green(noone pushed the button after 60s)
-if(fin_cnt) counter <= 6'd0          ;
+if(~rst_n ) counter <= 6'd0          ;else
+if(fin_cnt) counter <= 6'd0          ;else
+if(~cg    ) counter <= counter + 6'd1;    // enabled if not crossed green(noone pushed the button after 60s)
 
-// ENCODER 2^2 : 2 
-always @(*)
-if(traff_red)    current_state <= 2'b00;else 
-if(traff_yellow) current_state <= 2'b01;else
-if(ug)           current_state <= 2'b10;else
-if(pg)           current_state <= 2'b11;else
-                 current_state <= 2'b10;
 // MUX 4:1 
 always @(*)
-case(current_state) 
-  2'b00:    state_to_compare = 6'b01_1101; // 29s                                      RED
-  2'b01:    state_to_compare = 6'b00_0100; // 4s                                       YELLOW 
-  2'b10:    state_to_compare = 6'b11_1011; // 59s                                      UG
-  default:  state_to_compare = 6'b11_1011; // 59s, default (case 2'b11, 'dx or others) PG
+case({traff_red,traff_yellow,ug,pg}) 
+  4'b1000:    state_to_compare = 6'b01_1101; // 29s                                      RED
+  4'b0100:    state_to_compare = 6'b00_0100; // 4s                                       YELLOW 
+  4'b0010:    state_to_compare = 6'b11_1011; // 59s                                      UG
+  default:    state_to_compare = 6'b11_1011; // 59s, default (case 2'b11, 'dx or others) PG
+endcase
 
-assign fin_cnt = (counter == state_to_compare);
+  assign fin_cnt = (counter == state_to_compare_d);
 //--------------------------------------------------------------------------------------------------
 
+//state to compare delayed
+always @(posedge clk or negedge rst_n)
+  if(~rst_n) state_to_compare_d <= 'd0;else
+             state_to_compare_d <= state_to_compare;
 
 
 //FSM Code
@@ -108,22 +105,22 @@ end
 //STATE SWITCH LOGIC
 always @(*) 
 case (state)
-  UNPRESSED_GREEN: if(btn)     next_state <= PRESSED_GREEN  ;else
-                   if(fin_cnt) next_state <= CROSSED_GREEN  ;else
-                               next_state <= UNPRESSED_GREEN; 
-  PRESSED_GREEN  : if(fin_cnt) next_state <= YELLOW       ;else
-                               next_state <= PRESSED_GREEN;
-  CROSSED_GREEN  : if(btn) next_state <= YELLOW       ;else
-                           next_state <= CROSSED_GREEN;
-  YELLOW         : if(fin_cnt) next_state <= RED   ;else
-                               next_state <= YELLOW;
-  RED            : if(fin_cnt) next_state <= UNPRESSED_GREEN;else
-                               next_state <= RED            ;                                                                                              
-  default        : next_state <= UNPRESSED_GREEN;
+  UNPRESSED_GREEN: if(btn & ~fin_cnt) next_state = PRESSED_GREEN  ;else
+                   if(~btn & fin_cnt) next_state = CROSSED_GREEN  ;else
+                                      next_state = UNPRESSED_GREEN; 
+  PRESSED_GREEN  : if(fin_cnt)        next_state = YELLOW       ;
+       
+  CROSSED_GREEN  : if(btn)     next_state = YELLOW       ;else
+                               next_state = CROSSED_GREEN;
+  YELLOW         : if(fin_cnt) next_state = RED   ;else
+                               next_state = YELLOW;
+  default        : if(fin_cnt) next_state = UNPRESSED_GREEN;else
+                               next_state = RED            ;                                                                                              
 endcase  
  
-// DECODER 3 : 8
+// DECODER for states (only 1 state at one moment) ONE HOT
 
  assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state; 
+
 
 endmodule        
