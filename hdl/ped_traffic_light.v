@@ -21,7 +21,7 @@ module ped_traffic_light #(
 )
 (
 // System IF ---------------------------------------------------------------------------------------
-  input  clk         , //clock signal 1 Hz (1 sec)
+  input  clk         , // clock signal needs to be 1 Hz (1 sec)
   input  rst_n       , // Asynchronous reset , active low
   input  btn         , // Button
   
@@ -47,7 +47,12 @@ localparam RED             = 4'b100;
 //--------------------------------------------------------------------------------------------------
 //                                            INTERNAL SIGNALS
 //-------------------------------------------------------------------------------------------------
+//Frequency divider
+wire        sample_en ;
+reg  [26:0] count     ;
+wire [31:0] div_factor;
 
+//Ped traffic light
 wire          ug              ; // unpressed green
 wire          pg              ; // pressed green
 wire          cg              ; // crossed green
@@ -64,6 +69,8 @@ reg [2:0] next_state;
 //--------------------------------------------------------------------------------------------------
 //                                                  CODE
 //--------------------------------------------------------------------------------------------------
+
+//Pedestrian traffic light              
 
 assign traff_green = ug | pg | cg;
 assign ped_green = traff_red;
@@ -120,7 +127,8 @@ endcase
  
 // DECODER for states (only 1 state at one moment) ONE HOT
 
- assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state; 
+ assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state; // shifts with next_state value
+
 
 
 endmodule        
