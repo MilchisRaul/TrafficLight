@@ -65,6 +65,7 @@ reg [6 - 1:0] state_to_compare_d; // state to compare with counter delayed 1 TCK
 
 reg [2:0] state     ; // 000 - UG , 001 - PG , 010 - CG , 011 - YELLOW , 100 - RED
 reg [2:0] next_state;
+reg [2:0] next_state_d;
 
 //--------------------------------------------------------------------------------------------------
 //                                                  CODE
@@ -100,6 +101,10 @@ always @(posedge clk or negedge rst_n)
   if(~rst_n) state_to_compare_d <= 'd0;else
              state_to_compare_d <= state_to_compare;
 
+//state delayed
+always @(posedge clk or negedge rst_n)
+  if(~rst_n) next_state_d <= 'd0  ;else
+             next_state_d <= next_state;
 
 //FSM Code
 
@@ -127,7 +132,7 @@ endcase
  
 // DECODER for states (only 1 state at one moment) ONE HOT
 
- assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state; // shifts with next_state value
+ assign {traff_red,traff_yellow,cg,pg,ug} = 5'b00001 << next_state_d; // shifts with next_state value
 
 
 
